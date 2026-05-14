@@ -11,7 +11,7 @@ function StatMini({ icon: Icon, label, value, unit, color, bg }) {
   return (
     <Box sx={{
       flex: 1, minWidth: 140,
-      backgroundColor: bg,
+      backgroundColor: bg, 
       border: `1.5px solid ${color}33`,
       borderRadius: 3, p: 2,
     }}>
@@ -315,7 +315,7 @@ function DetalleProc({ data }) {
 
       <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
         <StatMini icon={Clock}      label="Surtido"    value={data.surtido_dias || '—'}                       unit="días"        color="#7C3AED" bg="#F5F3FF" />
-        <StatMini icon={Zap}        label="Capacidad"  value={Number(data.capacidad || 0).toLocaleString()}   unit={data.unidad} color="#16a34a" bg="#f0fdf4" />
+        <StatMini icon={Zap}        label="Capsulas"  value={Number(data.capacidad || 0).toLocaleString()}   unit={data.unidad} color="#16a34a" bg="#f0fdf4" />
         <StatMini icon={TrendingUp} label="Producción" value={Number(data.kg_por_dia || 0).toLocaleString()}  unit="kg/día"      color="#D946EF" bg="#FDF4FF" />
       </Box>
 
