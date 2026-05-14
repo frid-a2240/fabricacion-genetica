@@ -1,12 +1,13 @@
 import { Box, Paper, Typography, Grid } from '@mui/material'
-import { CheckCircle2, AlertTriangle, Clock, Layers } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Clock, Layers, XCircle } from 'lucide-react'
 
 export function Dashboard({ stats, loteActivo }) {
   const cards = [
-    { label: 'Total Etapas',  value: stats.total,       icon: Layers,        color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
-    { label: 'Completadas',   value: stats.completados, icon: CheckCircle2,  color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-    { label: 'Atrasadas',     value: stats.atrasados,   icon: AlertTriangle, color: '#dc2626', bg: '#fff5f5', border: '#fecaca' },
-    { label: 'Pendientes',    value: stats.pendientes,  icon: Clock,         color: '#D946EF', bg: '#FDF4FF', border: '#F5D0FE' },
+    { label: 'Total Etapas',  value: stats.total,       icon: Layers,       color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+    { label: 'Completadas',   value: stats.completados, icon: CheckCircle2, color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+    { label: 'Fuera de plan', value: stats.fueraDePlan, icon: XCircle,      color: '#dc2626', bg: '#fff5f5', border: '#fecaca' },
+    { label: 'Atrasadas',     value: stats.atrasados,   icon: AlertTriangle,color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+    { label: 'Pendientes',    value: stats.pendientes,  icon: Clock,        color: '#D946EF', bg: '#FDF4FF', border: '#F5D0FE' },
   ]
   const pct = stats.total > 0 ? Math.round((stats.completados / stats.total) * 100) : 0
 
@@ -16,26 +17,26 @@ export function Dashboard({ stats, loteActivo }) {
         {cards.map((c, i) => {
           const Icon = c.icon
           return (
-            <Grid item xs={6} sm={3} key={i}>
+            <Grid item xs={6} sm={4} md key={i}>
               <Paper elevation={0} sx={{
-                p: 2.5, borderRadius: 4, border: `1.5px solid ${c.border}`,
-                backgroundColor: c.bg, display: 'flex', alignItems: 'center', gap: 2,
+                p: 2, borderRadius: 4, border: `1.5px solid ${c.border}`,
+                backgroundColor: c.bg, display: 'flex', alignItems: 'center', gap: 1.5,
                 boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
                 transition: 'transform 0.2s, box-shadow 0.2s',
                 '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }
               }}>
                 <Box sx={{
-                  width: 46, height: 46, borderRadius: 3,
+                  width: 42, height: 42, borderRadius: 3,
                   backgroundColor: c.color + '18',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                 }}>
-                  <Icon size={22} color={c.color} />
+                  <Icon size={20} color={c.color} />
                 </Box>
                 <Box>
-                  <Typography sx={{ fontSize: '1.9rem', fontWeight: 800, color: c.color, lineHeight: 1 }}>
+                  <Typography sx={{ fontSize: '1.7rem', fontWeight: 800, color: c.color, lineHeight: 1 }}>
                     {c.value}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, mt: 0.3 }}>
+                  <Typography sx={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, mt: 0.3 }}>
                     {c.label}
                   </Typography>
                 </Box>
