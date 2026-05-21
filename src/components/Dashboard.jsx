@@ -73,3 +73,4 @@ export function Dashboard({ stats, loteActivo }) {
     </Box>
   )
 }
+

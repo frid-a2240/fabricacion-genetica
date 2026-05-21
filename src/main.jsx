@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import App from './App.jsx'
+import { AuthGate } from './components/auth/AuthGate.jsx'
 
 const theme = createTheme({
   palette: {
@@ -23,7 +24,11 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <App />
+      <AuthGate>
+        {({ usuario, permisos, onLogout }) => (
+          <App usuario={usuario} permisos={permisos} onLogout={onLogout} />
+        )}
+      </AuthGate>
     </ThemeProvider>
   </StrictMode>
 )
