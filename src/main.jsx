@@ -6,9 +6,9 @@ import { AuthGate } from './components/auth/AuthGate.jsx'
 
 const theme = createTheme({
   palette: {
-    primary:    { main: '#7C3AED' },           // morado principal
-    secondary:  { main: '#D946EF' },           // magenta/rosa acento
-    background: { default: '#F5F3FF' },        // fondo lavanda muy suave
+    primary:    { main: '#7C3AED' },   
+    secondary:  { main: '#D946EF' },           
+    background: { default: '#F5F3FF' },        
   },
   typography: {
     fontFamily: '"IBM Plex Sans", "Roboto Condensed", sans-serif',

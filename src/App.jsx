@@ -3,7 +3,7 @@ import {
   Box, Typography, Button, CircularProgress, Snackbar, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip
 } from '@mui/material'
-import { User, RefreshCw, Package, Clock } from 'lucide-react'
+import { User, RefreshCw, Package, Clock, LogOut } from 'lucide-react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { supabase } from './lib/supabase.js'
 import { LoteSelector } from './components/LoteSelector.jsx'
@@ -13,7 +13,7 @@ import { TiemposTecnicos } from './components/TiemposTecnicos.jsx'
 
 const HOY = new Date('2026-05-13T00:00:00')
 
-export default function App() {
+export default function App({ usuario, permisos, onLogout }) {
   const [vista, setVista]               = useState('lotes')
   const [lotes, setLotes]               = useState([])
   const [selectedLote, setSelectedLote] = useState(null)
@@ -164,7 +164,7 @@ export default function App() {
         <Box component="img" src="/genetica-icon.png" alt="Genética Laboratorios"
           sx={{ height: 48, objectFit: 'contain', flexShrink: 0 }} />
 
-        {/* Título centrado/al lado del logo */}
+        {/* Título */}
         <Typography sx={{
           fontSize: '1.05rem', fontWeight: 600, color: '#1e293b',
           letterSpacing: 0.2, flex: 1,
@@ -199,7 +199,7 @@ export default function App() {
           })}
         </Box>
 
-        {/* Usuario + refrescar */}
+        {/* Actualizar */}
         {vista === 'lotes' && (
           <Button size="small" startIcon={<RefreshCw size={13} />}
             onClick={() => { cargarLotes(); if (selectedLote) seleccionarLote(selectedLote) }}
@@ -208,11 +208,24 @@ export default function App() {
             Actualizar
           </Button>
         )}
+
+        {/* Chip usuario */}
         {currentUser && (
           <Chip icon={<User size={12} />} label={currentUser} size="small"
             onClick={() => { setTempUser(currentUser); setUserDialog(true) }}
             sx={{ backgroundColor: '#F5F3FF', color: '#7C3AED', border: '1px solid #DDD6FE',
               cursor: 'pointer', '& .MuiChip-icon': { color: '#7C3AED' }, fontSize: '0.7rem', height: 24 }} />
+        )}
+
+        {/* Botón cerrar sesión */}
+        {onLogout && (
+          <Button size="small" onClick={onLogout} startIcon={<LogOut size={13} />}
+            sx={{
+              color: '#94a3b8', textTransform: 'none', fontSize: '0.72rem', borderRadius: 2,
+              '&:hover': { color: '#ef4444', backgroundColor: '#FFF1F2' },
+            }}>
+            Salir
+          </Button>
         )}
       </Box>
 
