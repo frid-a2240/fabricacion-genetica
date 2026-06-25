@@ -173,9 +173,6 @@ export default function App() {
           <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1 }}>
             Seguimiento de Procesos de Fabricación
           </Typography>
-          <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-            MRP · Gestión de Lotes
-          </Typography>
         </Box>
 
         {/* Botón volver / actualizar */}

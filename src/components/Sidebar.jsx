@@ -24,9 +24,6 @@ export function Sidebar({ activo, onChange }) {
         <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: '#3B0764', lineHeight: 1.1 }}>
           Genética
         </Typography>
-        <Typography sx={{ fontSize: '0.65rem', color: '#94a3b8', mt: 0.3 }}>
-          MRP · Gestión de Lotes
-        </Typography>
       </Box>
 
       {/* Navegación */}
