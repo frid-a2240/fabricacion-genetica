@@ -165,9 +165,7 @@ export default function App() {
         display: 'flex', alignItems: 'center', gap: 2,
         position: 'sticky', top: 0, zIndex: 100,
       }}>
-        <Box component="img" src="/genetica-icon.png" alt="Genética Laboratorios"
-          sx={{ height: 42, objectFit: 'contain', flexShrink: 0 }}
-          onError={(e) => { e.target.style.display = 'none' }} />
+        
 
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1 }}>

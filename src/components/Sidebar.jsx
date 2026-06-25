@@ -17,13 +17,10 @@ export function Sidebar({ activo, onChange }) {
       display: 'flex', flexDirection: 'column',
     }}>
       {/* Branding */}
-      <Box sx={{ px: 2.5, py: 2.2, borderBottom: '1px solid #f1f5f9' }}>
+      <Box sx={{ px: 3.8, py: 1.5, borderBottom: '1px solid #f1f5f9' }}>
         <Box component="img" src="/genetica-icon.png" alt="Genética"
-          sx={{ height: 38, objectFit: 'contain', mb: 0.8 }}
+          sx={{ height: 85, objectFit: 'contain', mb: 0.8 }}
           onError={(e) => { e.target.style.display = 'none' }} />
-        <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: '#3B0764', lineHeight: 1.1 }}>
-          Genética
-        </Typography>
       </Box>
 
       {/* Navegación */}
