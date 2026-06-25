@@ -2,16 +2,15 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import App from './App.jsx'
-import { AuthGate } from './components/auth/AuthGate.jsx'
 
 const theme = createTheme({
   palette: {
-    primary:    { main: '#7C3AED' },   
-    secondary:  { main: '#D946EF' },           
-    background: { default: '#F5F3FF' },        
+    primary:    { main: '#7C3AED' },
+    secondary:  { main: '#D946EF' },
+    background: { default: '#F8FAFC' },
   },
   typography: {
-    fontFamily: '"IBM Plex Sans", "Roboto Condensed", sans-serif',
+    fontFamily: '"IBM Plex Sans", "Roboto", sans-serif',
   },
   components: {
     MuiPaper: {
@@ -24,11 +23,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AuthGate>
-        {({ usuario, permisos, onLogout }) => (
-          <App usuario={usuario} permisos={permisos} onLogout={onLogout} />
-        )}
-      </AuthGate>
+      <App />
     </ThemeProvider>
   </StrictMode>
 )
