@@ -7,23 +7,45 @@ import {
 import {
   Package, FlaskConical, Beaker, Factory,
   Microscope, BadgeCheck, History, Check, X,
-  CheckCircle2, AlertTriangle, XCircle, Clock, Layers
+  CheckCircle2, AlertTriangle, XCircle, Clock, Layers,
+  ShieldAlert, Truck, Info
 } from 'lucide-react'
+import { ORDEN_ETAPA } from '../../constants/etapas.js'
 import { format, parseISO, differenceInDays, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const HOY = new Date('2026-05-13T00:00:00')
 
 const ETAPAS_CONFIG = {
-  'Insumos':                                   { icon: Package,      color: '#7C3AED', grad: ['#4c1d95','#7c3aed'] },
+  'Planeación Granel':                         { icon: Package,      color: '#7C3AED', grad: ['#4c1d95','#7c3aed'] },
+  'Insumos':                                   { icon: Package,      color: '#7C3AED', grad: ['#4c1d95','#7c3aed'] }, // legacy
   'Producción de Granel':                      { icon: FlaskConical, color: '#0891b2', grad: ['#164e63','#0891b2'] },
-  'Graneles UA':                               { icon: Beaker,       color: '#059669', grad: ['#064e3b','#059669'] },
+  'Planeación de Acondicionamiento':           { icon: Beaker,       color: '#059669', grad: ['#064e3b','#059669'] },
+  'Graneles UA':                               { icon: Beaker,       color: '#059669', grad: ['#064e3b','#059669'] }, // legacy
   'Producción Acondicionamiento Prim/Sec':     { icon: Factory,      color: '#d97706', grad: ['#78350f','#d97706'] },
+  'Cuarentena':                                { icon: ShieldAlert,  color: '#ca8a04', grad: ['#713f12','#ca8a04'] },
   'Laboratorio':                               { icon: Microscope,   color: '#dc2626', grad: ['#7f1d1d','#dc2626'] },
-  'Liberación':                                { icon: BadgeCheck,   color: '#16a34a', grad: ['#14532d','#16a34a'] },
+  'Aceptado':                                  { icon: BadgeCheck,   color: '#16a34a', grad: ['#14532d','#16a34a'] },
+  'Liberación':                                { icon: BadgeCheck,   color: '#16a34a', grad: ['#14532d','#16a34a'] }, // legacy
+  'Envío':                                     { icon: Truck,        color: '#0891b2', grad: ['#164e63','#0891b2'] },
 }
 function getCfg(nombre) {
   return ETAPAS_CONFIG[nombre] || { icon: Package, color: '#6366f1', grad: ['#1e1b4b','#6366f1'] }
+}
+
+// Extrae unidades por presentación de strings tipo "Caja con 10 tabletas", "Frasco con 60 cápsulas"
+function unidadesPorPresentacion(presentacion) {
+  if (!presentacion) return null
+  // Acepta "con 10", "c/10", "c/ 10", "c10", o simplemente el primer número
+  const m = presentacion.match(/(?:con|c\/?)\s*(\d+)/i) || presentacion.match(/(\d+)/)
+  return m ? parseInt(m[1]) : null
+}
+
+// Calcula presentaciones a acondicionar = granel ÷ unidades por presentación
+function calcularPresentaciones(granelQty, presentacion) {
+  const div = unidadesPorPresentacion(presentacion)
+  if (!granelQty || !div) return null
+  return Math.floor(granelQty / div)
 }
 
 function formatFecha(iso) {
@@ -152,27 +174,24 @@ const paperSx = { borderRadius: 3, overflow: 'hidden', boxShadow: '0 20px 60px r
 // ═══════════════════════════════════════════════════════════════════════════
 
 function Dialog1({ fp, lote, open, onClose, onGuardar }) {
-  const cfg = getCfg('Insumos')
+  const cfg = getCfg('Planeación Granel')
   const estado = getEstado(fp?.fecha_plan, fp?.fecha_actual)
   const [plan, setPlan] = useState(fp?.fecha_plan || '')
-  const [real, setReal] = useState(fp?.fecha_actual || '')
-  // ── Datos del lote (deshabilitados — heredados de la creación del lote) ──
   const denG = lote?.den_generica       || ''
   const conc = lote?.concentracion      || ''
   const ff   = lote?.forma_farmaceutica || ''
   const qtyP = lote?.cantidad?.toString() || ''
-  const [qtyR, setQtyR] = useState(fp?.cantidad_actual?.toString() || '')
   const [guard, setGuard] = useState(false)
 
   async function guardar() {
     setGuard(true)
-    await onGuardar(fp.id, fp.etapa_id, plan || null, real || null, qtyR ? parseInt(qtyR) : null)
+    await onGuardar(fp.id, fp.etapa_id, plan || null, null, null)
     setGuard(false); onClose()
   }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
-      <DialogHeader nombre="OP Planner" numero={1} cfg={cfg} estado={estado} onClose={onClose} />
+      <DialogHeader nombre="Planeación Granel" numero={1} cfg={cfg} estado={estado} onClose={onClose} />
       <DialogContent sx={{ p: 0 }}>
         <Table size="small"><TableBody>
           <FRow label="Denominación Genérica"><FInput value={denG} onChange={()=>{}} disabled /></FRow>
@@ -180,12 +199,7 @@ function Dialog1({ fp, lote, open, onClose, onGuardar }) {
           <FRow label="Forma Farmacéutica"><FInput value={ff} onChange={()=>{}} disabled /></FRow>
           <FRow label="QTY Plan"><FInput value={qtyP} onChange={()=>{}} type="number" disabled /></FRow>
           <FRow label="Fecha Plan"><FDate value={plan} onChange={setPlan} /></FRow>
-          <FRow label="Fecha Real"><FDate value={real} onChange={setReal} /></FRow>
-          <FRow label="QTY Real"><FInput value={qtyR} onChange={setQtyR} type="number" /></FRow>
         </TableBody></Table>
-        <Box sx={{ p: 2 }}>
-          <DesfaseAlert editFecha={real} fechaPlan={plan} />
-        </Box>
       </DialogContent>
       <DialogFooter onClose={onClose} onGuardar={guardar} guardando={guard} color={cfg.color} />
     </Dialog>
@@ -212,8 +226,8 @@ function Dialog2({ fp, open, onClose, onGuardar }) {
       <DialogHeader nombre="Producción de Granel" numero={2} cfg={cfg} estado={estado} onClose={onClose} />
       <DialogContent sx={{ p: 0 }}>
         <Table size="small"><TableBody>
-          <FRow label="Fecha Plan"><FDate value={plan} onChange={setPlan} /></FRow>
-          <FRow label="Fecha Real"><FDate value={real} onChange={setReal} /></FRow>
+          <FRow label="Fecha Plan Produccion"><FDate value={plan} onChange={setPlan} /></FRow>
+          <FRow label="Fecha Real Producción"><FDate value={real} onChange={setReal} /></FRow>
           <FRow label="QTY"><FInput value={qty} onChange={setQty} type="number" /></FRow>
           <FRow label="Fecha Exp."><FDate value={exp} onChange={setExp} /></FRow>
         </TableBody></Table>
@@ -226,34 +240,38 @@ function Dialog2({ fp, open, onClose, onGuardar }) {
   )
 }
 
-function Dialog3({ fp, lote, open, onClose, onGuardar }) {
-  const cfg = getCfg('Graneles UA')
+function Dialog3({ fp, lote, granelQty, open, onClose, onGuardar }) {
+  const cfg = getCfg('Planeación de Acondicionamiento')
   const estado = getEstado(fp?.fecha_plan, fp?.fecha_actual)
   const [plan, setPlan] = useState(fp?.fecha_plan || '')
-  const [real, setReal] = useState(fp?.fecha_actual || '')
-  const [qtyR, setQtyR] = useState(fp?.cantidad_actual?.toString() || '')
+  
 
-  // ── Los 6 datos del producto + cantidad plan + lote vienen del lote padre ──
-  const loteNum = lote?.lote                          || ''
-  const denG    = lote?.den_generica                  || ''
-  const denD    = lote?.denominacion_distintiva       || ''
-  const conc    = lote?.concentracion                 || ''
-  const ff      = lote?.forma_farmaceutica            || ''
-  const pres    = lote?.presentacion                  || ''
-  const tam     = lote?.tamano                        || ''
-  const qtyP    = lote?.cantidad?.toString()          || ''
+  // Auto-cálculo de unidades (presentaciones) a partir del granel
+  const presentacionesCalc = calcularPresentaciones(granelQty, lote?.presentacion)
+  const divisor = unidadesPorPresentacion(lote?.presentacion)
+  const [qtyR, setQtyR] = useState(
+    fp?.cantidad_actual?.toString() || (presentacionesCalc?.toString() ?? '')
+  )
+
+  const loteNum = lote?.lote                    || ''
+  const denG    = lote?.den_generica            || ''
+  const denD    = lote?.denominacion_distintiva || ''
+  const conc    = lote?.concentracion           || ''
+  const ff      = lote?.forma_farmaceutica      || ''
+  const pres    = lote?.presentacion            || ''
+  const qtyP    = granelQty?.toString() || lote?.cantidad?.toString() || ''
 
   const [guard, setGuard] = useState(false)
 
   async function guardar() {
     setGuard(true)
-    await onGuardar(fp.id, fp.etapa_id, plan || null, real || null, qtyR ? parseInt(qtyR) : null)
+   await onGuardar(fp.id, fp.etapa_id, plan || null, null, qtyR ? parseInt(qtyR) : null)
     setGuard(false); onClose()
   }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
-      <DialogHeader nombre="Planner OA" numero={3} cfg={cfg} estado={estado} onClose={onClose} />
+      <DialogHeader nombre="Planeación de Acondicionamiento" numero={3} cfg={cfg} estado={estado} onClose={onClose} />
       <DialogContent sx={{ p: 0 }}>
         <Table size="small"><TableBody>
           <FRow label="Lote"><FInput value={loteNum} onChange={()=>{}} disabled /></FRow>
@@ -262,14 +280,29 @@ function Dialog3({ fp, lote, open, onClose, onGuardar }) {
           <FRow label="Concentración"><FInput value={conc} onChange={()=>{}} disabled /></FRow>
           <FRow label="Forma Farmacéutica"><FInput value={ff} onChange={()=>{}} disabled /></FRow>
           <FRow label="Presentación"><FInput value={pres} onChange={()=>{}} disabled /></FRow>
-          <FRow label="Tamaño"><FInput value={tam} onChange={()=>{}} disabled /></FRow>
-          <FRow label="QTY Plan Producción"><FInput value={qtyP} onChange={()=>{}} type="number" disabled /></FRow>
-          <FRow label="Fecha Plan Producción"><FDate value={plan} onChange={setPlan} /></FRow>
-          <FRow label="Fecha Real "><FDate value={real} onChange={setReal} /></FRow>
-          <FRow label="QTY Real"><FInput value={qtyR} onChange={setQtyR} type="number" /></FRow>
+          <FRow label="QTY Producida Granel"><FInput value={qtyP} onChange={()=>{}} type="number" disabled /></FRow>
+          <FRow label="Fecha Plan"><FDate value={plan} onChange={setPlan} /></FRow>
+          <FRow label="QTY Plan (presentaciones)"><FInput value={qtyR} onChange={setQtyR} type="number" /></FRow>
         </TableBody></Table>
-        <Box sx={{ p: 2 }}>
-          <DesfaseAlert editFecha={real} fechaPlan={plan} />
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {divisor && presentacionesCalc != null && (
+            <Box sx={{ backgroundColor: '#f0fdf4', borderRadius: 2, px: 1.5, py: 0.8,
+              border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: 0.8 }}>
+              <CheckCircle2 size={13} color="#16a34a" />
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#15803d' }}>
+                Cálculo: {Number(qtyP).toLocaleString('en-US')} ÷ {divisor} = {presentacionesCalc.toLocaleString('en-US')} presentaciones
+              </Typography>
+            </Box>
+          )}
+          {!divisor && pres && (
+            <Box sx={{ backgroundColor: '#fef2f2', borderRadius: 2, px: 1.5, py: 0.8,
+              border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 0.8 }}>
+              <AlertTriangle size={13} color="#dc2626" />
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#b91c1c' }}>
+                No se pudo extraer unidades de "{pres}" — captúralo manual
+              </Typography>
+            </Box>
+          )}
         </Box>
       </DialogContent>
       <DialogFooter onClose={onClose} onGuardar={guardar} guardando={guard} color={cfg.color} />
@@ -297,8 +330,8 @@ function Dialog4({ fp, open, onClose, onGuardar }) {
       <DialogHeader nombre="Producción Acondicionamiento Prim/Sec" numero={4} cfg={cfg} estado={estado} onClose={onClose} />
       <DialogContent sx={{ p: 0 }}>
         <Table size="small"><TableBody>
-          <FRow label="Fecha Plan"><FDate value={plan} onChange={setPlan} /></FRow>
-          <FRow label="Fecha Real"><FDate value={real} onChange={setReal} /></FRow>
+          <FRow label="Fecha Plan Produccion"><FDate value={plan} onChange={setPlan} /></FRow>
+          <FRow label="Fecha Real Produccion"><FDate value={real} onChange={setReal} /></FRow>
           <FRow label="QTY"><FInput value={qty} onChange={setQty} type="number" /></FRow>
           <FRow label="Fecha Exp."><FDate value={exp} onChange={setExp} /></FRow>
         </TableBody></Table>
@@ -311,7 +344,43 @@ function Dialog4({ fp, open, onClose, onGuardar }) {
   )
 }
 
-function Dialog5({ fp, open, onClose, onGuardar, fechaAnteriorReal }) {
+function DialogCuarentena({ fp, open, onClose, onGuardar }) {
+  const cfg = getCfg('Cuarentena')
+  const estado = getEstado(fp?.fecha_plan, fp?.fecha_actual)
+  const [ingreso, setIngreso] = useState(fp?.fecha_actual || '')
+  const [qty, setQty]         = useState(fp?.cantidad_actual?.toString() || '')
+  const [guard, setGuard]     = useState(false)
+
+  async function guardar() {
+    setGuard(true)
+    await onGuardar(fp.id, fp.etapa_id, null, ingreso || null, qty ? parseInt(qty) : null)
+    setGuard(false); onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
+      <DialogHeader nombre="Cuarentena" numero={ORDEN_ETAPA.CUARENTENA} cfg={cfg} estado={estado} onClose={onClose} />
+      <DialogContent sx={{ p: 0 }}>
+        <Table size="small"><TableBody>
+          <FRow label="Fecha de Ingreso"><FDate value={ingreso} onChange={setIngreso} /></FRow>
+          <FRow label="Cantidad"><FInput value={qty} onChange={setQty} type="number" /></FRow>
+        </TableBody></Table>
+        <Box sx={{ p: 2 }}>
+          <Box sx={{ backgroundColor: '#fffbeb', borderRadius: 2, px: 1.5, py: 0.8,
+            border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <ShieldAlert size={13} color="#ca8a04" />
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#92400e' }}>
+              Al guardar, el lote se moverá a cuarentena (WHS3)
+            </Typography>
+          </Box>
+        </Box>
+      </DialogContent>
+      <DialogFooter onClose={onClose} onGuardar={guardar} guardando={guard} color={cfg.color} />
+    </Dialog>
+  )
+}
+
+function DialogLaboratorio({ fp, open, onClose, onGuardar, fechaAnteriorReal }) {
   const cfg = getCfg('Laboratorio')
   const estado = getEstado(fp?.fecha_plan, fp?.fecha_actual)
   function calcDefault() {
@@ -334,7 +403,7 @@ function Dialog5({ fp, open, onClose, onGuardar, fechaAnteriorReal }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
-      <DialogHeader nombre="Laboratorio" numero={5} cfg={cfg} estado={estado} onClose={onClose} />
+      <DialogHeader nombre="Laboratorio" numero={ORDEN_ETAPA.LABORATORIO} cfg={cfg} estado={estado} onClose={onClose} />
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ display: 'flex', gap: 1, px: 2.5, pt: 2, pb: 1, flexWrap: 'wrap' }}>
           {circulos.map(l => (
@@ -346,16 +415,16 @@ function Dialog5({ fp, open, onClose, onGuardar, fechaAnteriorReal }) {
           ))}
         </Box>
         <Table size="small"><TableBody>
-          <FRow label="Fecha Plan (≈7 días)"><FDate value={plan} onChange={setPlan} helperText="Default: real anterior + 7 días" /></FRow>
+          <FRow label="Fecha Plan (≈7 días)"><FDate value={plan} onChange={setPlan} helperText="Default: ingreso cuarentena + 7 días" /></FRow>
           <FRow label="Fecha Real"><FDate value={real} onChange={setReal} /></FRow>
         </TableBody></Table>
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <DesfaseAlert editFecha={real} fechaPlan={plan} />
-          <Box sx={{ backgroundColor: '#fffbeb', borderRadius: 2, px: 1.5, py: 0.8,
-            border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 0.8 }}>
-            <Clock size={13} color="#d97706" />
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#d97706' }}>
-              PLT de laboratorio: 7 días hábiles
+          <Box sx={{ backgroundColor: '#eef2ff', borderRadius: 2, px: 1.5, py: 0.8,
+            border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Info size={13} color="#6366f1" />
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#4338ca' }}>
+              Solo seguimiento informativo · no mueve inventario
             </Typography>
           </Box>
         </Box>
@@ -365,42 +434,35 @@ function Dialog5({ fp, open, onClose, onGuardar, fechaAnteriorReal }) {
   )
 }
 
-function Dialog6({ fp, lote, open, onClose, onGuardar, onUpdateLote }) {
-  const cfg = getCfg('Liberación')
+function DialogAceptado({ fp, lote, open, onClose, onGuardar, onUpdateLote }) {
+  const cfg = getCfg('Aceptado')
   const estado = getEstado(fp?.fecha_plan, fp?.fecha_actual)
   const [plan, setPlan] = useState(fp?.fecha_plan || '')
   const [real, setReal] = useState(fp?.fecha_actual || '')
   const [qty, setQty]   = useState(fp?.cantidad_actual?.toString() || '')
 
-  // Inicializa la acción según el estatus actual del lote
   const accionInicial =
     lote?.estatus === 'liberado'  ? 'aprobar'  :
     lote?.estatus === 'rechazado' ? 'rechazar' : null
   const [accion, setAccion] = useState(accionInicial)
   const [motivo, setMotivo] = useState(lote?.motivo_rechazo || '')
   const [guard, setGuard] = useState(false)
-
-  // No se puede guardar un rechazo sin motivo
   const motivoRequerido = accion === 'rechazar' && !motivo.trim()
 
   async function guardar() {
     setGuard(true)
-    // 1. Guardar fechas + QTY de la etapa (siempre)
     await onGuardar(fp.id, fp.etapa_id, plan || null, real || null, qty ? parseInt(qty) : null)
-
-    // 2. Actualizar estatus del lote si seleccionó una acción
     if (accion === 'aprobar') {
-      await onUpdateLote(lote.id, { estatus: 'liberado', motivo_rechazo: null }, '✓ Lote liberado')
+      await onUpdateLote(lote.id, { estatus: 'liberado', motivo_rechazo: null }, '✓ Lote aceptado · Consulta Historial')
     } else if (accion === 'rechazar') {
       await onUpdateLote(lote.id, { estatus: 'rechazado', motivo_rechazo: motivo.trim() || null }, '✓ Lote rechazado')
     }
-
     setGuard(false); onClose()
   }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
-      <DialogHeader nombre="Liberación" numero={6} cfg={cfg} estado={estado} onClose={onClose} />
+      <DialogHeader nombre="Aceptado" numero={ORDEN_ETAPA.ACEPTADO} cfg={cfg} estado={estado} onClose={onClose} />
       <DialogContent sx={{ p: 0 }}>
         <Table size="small"><TableBody>
           <FRow label="Fecha Plan"><FDate value={plan} onChange={setPlan} /></FRow>
@@ -409,8 +471,6 @@ function Dialog6({ fp, lote, open, onClose, onGuardar, onUpdateLote }) {
         </TableBody></Table>
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <DesfaseAlert editFecha={real} fechaPlan={plan} />
-
-          {/* ─── Botones aprobar / rechazar ─── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             <Button variant={accion === 'aprobar' ? 'contained' : 'outlined'}
               startIcon={<CheckCircle2 size={15} />}
@@ -433,19 +493,15 @@ function Dialog6({ fp, lote, open, onClose, onGuardar, onUpdateLote }) {
               Rechazar
             </Button>
           </Box>
-
-          {/* ─── Aprobado: confirmación ─── */}
           {accion === 'aprobar' && (
             <Box sx={{ backgroundColor: '#f0fdf4', borderRadius: 2, px: 1.5, py: 1,
               border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: 0.8 }}>
               <BadgeCheck size={14} color="#16a34a" />
               <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#16a34a' }}>
-                Al guardar, la QTY se sumará al inventario · PLT = 9 días
+                Al guardar, el lote pasará a Consulta Historial (pendiente de envío)
               </Typography>
             </Box>
           )}
-
-          {/* ─── Rechazado: pedir motivo ─── */}
           {accion === 'rechazar' && (
             <Box sx={{ backgroundColor: '#fef2f2', borderRadius: 2, p: 1.5,
               border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -487,17 +543,70 @@ function Dialog6({ fp, lote, open, onClose, onGuardar, onUpdateLote }) {
   )
 }
 
+function DialogEnvio({ fp, lote, open, onClose, onGuardar, onUpdateLote }) {
+  const cfg = getCfg('Envío')
+  const estado = getEstado(fp?.fecha_plan, fp?.fecha_actual)
+  const [plan, setPlan] = useState(fp?.fecha_plan || '')
+  const [real, setReal] = useState(fp?.fecha_actual || '')
+  const [qty, setQty]   = useState(fp?.cantidad_actual?.toString() || '')
+  const [guard, setGuard] = useState(false)
+
+  async function guardar() {
+    setGuard(true)
+    await onGuardar(fp.id, fp.etapa_id, plan || null, real || null, qty ? parseInt(qty) : null)
+    await onUpdateLote(lote.id, { estatus: 'enviado' }, '✓ Lote enviado · registrado en historial')
+    setGuard(false); onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
+      <DialogHeader nombre="Envío" numero={ORDEN_ETAPA.ENVIO} cfg={cfg} estado={estado} onClose={onClose} />
+      <DialogContent sx={{ p: 0 }}>
+        <Table size="small"><TableBody>
+          <FRow label="Fecha Programada"><FDate value={plan} onChange={setPlan} /></FRow>
+          <FRow label="Fecha de Envío"><FDate value={real} onChange={setReal} /></FRow>
+          <FRow label="Cantidad a Enviar"><FInput value={qty} onChange={setQty} type="number" /></FRow>
+        </TableBody></Table>
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <DesfaseAlert editFecha={real} fechaPlan={plan} />
+          <Box sx={{ backgroundColor: '#ecfeff', borderRadius: 2, px: 1.5, py: 0.8,
+            border: '1px solid #a5f3fc', display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Truck size={13} color="#0891b2" />
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#0e7490' }}>
+              Al guardar, el lote se marca como enviado y sale del inventario activo
+            </Typography>
+          </Box>
+        </Box>
+      </DialogContent>
+      <DialogFooter onClose={onClose} onGuardar={guardar} guardando={guard} color={cfg.color} />
+    </Dialog>
+  )
+}
+
 function EtapaDialogSelector({ fp, index, lote, open, onClose, onActualizar, onUpdateLote, ordenados }) {
   if (!fp) return null
-  const nombre = fp.etapas_proceso?.nombre || ''
+  const orden = fp.etapas_proceso?.orden
+  const nombre = (fp.etapas_proceso?.nombre || '').toLowerCase()
   const fechaAnteriorReal = index > 0 ? ordenados[index - 1]?.fecha_actual : null
+  const granelQty = ordenados.find(f => f.etapas_proceso?.orden === 2)?.cantidad_actual || lote?.cantidad
+
   const props = { fp, lote, open, onClose, onGuardar: onActualizar, onUpdateLote }
-  if (nombre === 'Insumos')                               return <Dialog1 {...props} />
-  if (nombre === 'Producción de Granel')                  return <Dialog2 {...props} />
-  if (nombre === 'Graneles UA')                           return <Dialog3 {...props} />
-  if (nombre === 'Producción Acondicionamiento Prim/Sec') return <Dialog4 {...props} />
-  if (nombre === 'Laboratorio')                           return <Dialog5 {...props} fechaAnteriorReal={fechaAnteriorReal} />
-  if (nombre === 'Liberación')                            return <Dialog6 {...props} />
+  if (orden === 1) return <Dialog1 {...props} />
+  if (orden === 2) return <Dialog2 {...props} />
+  if (orden === 3) return <Dialog3 {...props} granelQty={granelQty} />
+  if (orden === 4) return <Dialog4 {...props} />
+  if (orden === ORDEN_ETAPA.CUARENTENA || nombre.includes('cuarentena')) {
+    return <DialogCuarentena {...props} />
+  }
+  if (orden === ORDEN_ETAPA.LABORATORIO || nombre.includes('laboratorio')) {
+    return <DialogLaboratorio {...props} fechaAnteriorReal={fechaAnteriorReal} />
+  }
+  if (orden === ORDEN_ETAPA.ACEPTADO || nombre.includes('aceptado') || nombre.includes('liberaci')) {
+    return <DialogAceptado {...props} />
+  }
+  if (orden === ORDEN_ETAPA.ENVIO || nombre.includes('env')) {
+    return <DialogEnvio {...props} />
+  }
   return null
 }
 
@@ -544,16 +653,19 @@ function EtapaCard({ fp, index, onClick }) {
             {formatFecha(fp.fecha_plan) || '—'}
           </Typography>
         </Box>
+        {/* Etapa 1 (Planeación Granel) no captura fecha real ni cantidad */}
+       {fp.etapas_proceso?.orden !== 1 && fp.etapas_proceso?.orden !== 3 && (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography sx={{ fontSize: '0.58rem', color: cfg.color, fontWeight: 700, textTransform: 'uppercase' }}>Real</Typography>
-          <Typography sx={{ fontSize: '0.7rem', fontFamily: 'monospace',
-            fontWeight: fp.fecha_actual ? 700 : 400,
-            color: fp.fecha_actual ? cfg.color : '#cbd5e1',
-            fontStyle: fp.fecha_actual ? 'normal' : 'italic' }}>
-            {formatFecha(fp.fecha_actual) || '—'}
-          </Typography>
-        </Box>
-        {fp.cantidad_actual != null && (
+         <Typography sx={{ fontSize: '0.58rem', color: cfg.color, fontWeight: 700, textTransform: 'uppercase' }}>Real</Typography>
+            <Typography sx={{ fontSize: '0.7rem', fontFamily: 'monospace',
+              fontWeight: fp.fecha_actual ? 700 : 400,
+              color: fp.fecha_actual ? cfg.color : '#cbd5e1',
+              fontStyle: fp.fecha_actual ? 'normal' : 'italic' }}>
+              {formatFecha(fp.fecha_actual) || '—'}
+            </Typography>
+          </Box>
+        )}
+        {fp.etapas_proceso?.orden !== 1 && fp.cantidad_actual != null && (
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             borderTop: '1px dashed #e2e8f0', pt: 0.6 }}>
             <Typography sx={{ fontSize: '0.58rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Cant.</Typography>

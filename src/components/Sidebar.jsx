@@ -1,10 +1,16 @@
 import { Box, Typography } from '@mui/material'
-import { Factory, Warehouse, CalendarDays } from 'lucide-react'
+import {
+  Factory, Warehouse, CalendarDays,
+  SlidersHorizontal, History, ArrowLeftRight,
+} from 'lucide-react'
 
 const MODULOS = [
-  { id: 'produccion', label: 'Producción', Icon: Factory },
-  { id: 'inventario', label: 'Inventario', Icon: Warehouse },
-  { id: 'plan',       label: 'Plan',       Icon: CalendarDays },
+  { id: 'produccion',           label: 'Producción',            Icon: Factory },
+  { id: 'inventarios',          label: 'Inventarios',           Icon: Warehouse },
+  { id: 'planeacion',           label: 'Planeación',            Icon: CalendarDays },
+  { id: 'ajustes-inventarios',  label: 'Ajustes de Inventarios', Icon: SlidersHorizontal },
+  { id: 'consulta-historial',   label: 'Consulta Historial',    Icon: History },
+  { id: 'transferencias',       label: 'Transferencias',        Icon: ArrowLeftRight },
 ]
 
 export function Sidebar({ activo, onChange }) {
@@ -24,7 +30,7 @@ export function Sidebar({ activo, onChange }) {
       </Box>
 
       {/* Navegación */}
-      <Box sx={{ p: 1.2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      <Box sx={{ p: 1.2, display: 'flex', flexDirection: 'column', gap: 0.5, overflowY: 'auto', flex: 1 }}>
         {MODULOS.map(({ id, label, Icon }) => {
           const isActive = activo === id
           return (
@@ -53,7 +59,6 @@ export function Sidebar({ activo, onChange }) {
         })}
       </Box>
 
-      <Box sx={{ flex: 1 }} />
       <Box sx={{ p: 1.5, borderTop: '1px solid #f1f5f9' }}>
         <Typography sx={{ fontSize: '0.6rem', color: '#94a3b8', textAlign: 'center' }}>
           v1.0 · 2026

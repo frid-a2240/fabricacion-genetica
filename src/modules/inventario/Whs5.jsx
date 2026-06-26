@@ -8,7 +8,7 @@ export default function Whs5({ lotes = [] }) {
     <AlmacenLayout {...CFG} Icon={Ban}
       descripcion="Producto no apto, fuera del flujo de producción"
       mensajeVacio="Sin lotes rechazados">
-      {lotes.length > 0 && <TablaLotes lotes={lotes} color={CFG.color} etapaOrden={6} almacenId="whs5"/>}
+      {lotes.length > 0 && <TablaLotes lotes={lotes} color={CFG.color} etapaOrden={7} almacenId="whs5"/>}
     </AlmacenLayout>
   )
 }

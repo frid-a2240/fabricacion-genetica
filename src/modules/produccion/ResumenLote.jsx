@@ -4,7 +4,7 @@ import {
 } from '@mui/material'
 import {
   ClipboardList, CheckCircle2, AlertTriangle, XCircle, Clock, TrendingUp, TrendingDown, Minus,
-  Package, FlaskConical, Beaker, Ruler, Tag, Hash, BadgeCheck, Ban
+  Package, FlaskConical, Beaker, Tag, Hash, BadgeCheck, Ban
 } from 'lucide-react'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -15,6 +15,13 @@ function formatFecha(iso) {
   if (!iso) return null
   try { return format(parseISO(iso), 'dd/MMM/yy', { locale: es }).toUpperCase() }
   catch { return iso }
+}
+
+// Extrae unidades por presentación de strings tipo "Caja con 10", "Caja c/10", "Frasco c/60 cápsulas"
+function unidadesPorPresentacion(presentacion) {
+  if (!presentacion) return null
+  const m = presentacion.match(/(?:con|c\/?)\s*(\d+)/i) || presentacion.match(/(\d+)/)
+  return m ? parseInt(m[1]) : null
 }
 
 // Calcula el desfase en días entre fecha plan y fecha real
@@ -44,13 +51,15 @@ export function ResumenLote({ lote, fechasProceso }) {
   )
 
   // ── Totales globales ──────────────────────────────────────────
-  const qtyPlan = lote?.cantidad || 0
-  let totalRetraso       = 0     // suma de días de retraso (solo > 0)
-  let totalAdelanto      = 0     // suma de días de adelanto (solo < 0, en valor absoluto)
+  const divisor       = unidadesPorPresentacion(lote?.presentacion)
+  const qtyPlanGranel = lote?.cantidad || 0
+  const qtyPlanPres   = divisor ? Math.floor(qtyPlanGranel / divisor) : null
+
+  let totalRetraso       = 0
+  let totalAdelanto      = 0
   let etapasFueraDePlan  = 0
   let etapasEnPlan       = 0
   let etapasPendientes   = 0
-  let qtyRealUltima      = null  // QTY de la última etapa con fecha real
 
   ordenados.forEach(fp => {
     const desfase = calcDesfase(fp.fecha_plan, fp.fecha_actual)
@@ -62,13 +71,26 @@ export function ResumenLote({ lote, fechasProceso }) {
     } else {
       etapasEnPlan++
     }
-    if (fp.fecha_actual && fp.cantidad_actual != null) qtyRealUltima = fp.cantidad_actual
   })
 
+  // QTY real por sección: granel (orden 1-2) y presentaciones (orden 3-6)
+  const ultimaConCant = (filtro) =>
+    [...ordenados].filter(filtro).filter(fp => fp.cantidad_actual != null).slice(-1)[0]?.cantidad_actual ?? null
+
+  const realGranel = ultimaConCant(fp => (fp.etapas_proceso?.orden || 0) <= 2)
+  const realPres   = ultimaConCant(fp => (fp.etapas_proceso?.orden || 0) >= 3)
+
   const desfaseNeto = totalRetraso - totalAdelanto
-  const mermaQty    = qtyRealUltima != null ? qtyPlan - qtyRealUltima : null
-  const pctCumpl    = qtyPlan > 0 && qtyRealUltima != null
-    ? Math.round((qtyRealUltima / qtyPlan) * 100) : null
+  const pctGranel = qtyPlanGranel > 0 && realGranel != null
+    ? Math.round((realGranel / qtyPlanGranel) * 100) : null
+  const pctPres = qtyPlanPres != null && qtyPlanPres > 0 && realPres != null
+    ? Math.round((realPres / qtyPlanPres) * 100) : null
+
+  // Helper: plan por etapa, en su unidad correcta
+  const planDeEtapa = (orden) => {
+    if (orden <= 2) return qtyPlanGranel
+    return qtyPlanPres
+  }
 
   // ── Indicadores arriba de la tabla ───────────────────────────
   const stats = [
@@ -127,7 +149,34 @@ export function ResumenLote({ lote, fechasProceso }) {
               Estado del lote
             </Typography>
             <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: '#16a34a', lineHeight: 1.1 }}>
-              LOTE LIBERADO
+              LOTE ACEPTADO · Pendiente de envío
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
+      {lote?.estatus === 'enviado' && (
+        <Box sx={{
+          px: 3, py: 1.5, backgroundColor: '#ecfeff',
+          borderBottom: '1px solid #a5f3fc',
+          display: 'flex', alignItems: 'center', gap: 1.2
+        }}>
+          <Box sx={{
+            width: 32, height: 32, borderRadius: 1.5, flexShrink: 0,
+            backgroundColor: '#0891b2',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Package size={17} color="#fff" />
+          </Box>
+          <Box>
+            <Typography sx={{
+              fontSize: '0.6rem', fontWeight: 800, color: '#0e7490',
+              textTransform: 'uppercase', letterSpacing: 0.6
+            }}>
+              Estado del lote
+            </Typography>
+            <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: '#0891b2', lineHeight: 1.1 }}>
+              LOTE ENVIADO
             </Typography>
           </Box>
         </Box>
@@ -208,7 +257,6 @@ export function ResumenLote({ lote, fechasProceso }) {
             { label: 'Forma Farmacéutica',       value: lote?.forma_farmaceutica,       Icon: Beaker,       color: '#059669' },
             { label: 'Denominación Distintiva',  value: lote?.denominacion_distintiva,  Icon: Tag,          color: '#d97706' },
             { label: 'Presentación',             value: lote?.presentacion,             Icon: Package,      color: '#dc2626' },
-            { label: 'Tamaño',                   value: lote?.tamano,                   Icon: Ruler,        color: '#6366f1' },
           ].map(f => (
             <Box key={f.label} sx={{
               backgroundColor: '#fafafa', borderRadius: 2,
@@ -307,6 +355,7 @@ export function ResumenLote({ lote, fechasProceso }) {
               const desfase = calcDesfase(fp.fecha_plan, fp.fecha_actual)
               const estado  = getEstado(fp.fecha_plan, fp.fecha_actual)
               const EstadoIcon = estado.Icon
+              const planEtapa = planDeEtapa(fp.etapas_proceso?.orden || 0)
 
               return (
                 <TableRow key={fp.id} sx={{
@@ -349,9 +398,9 @@ export function ResumenLote({ lote, fechasProceso }) {
                   </TableCell>
                   <TableCell sx={{
                     fontSize: '0.74rem', fontFamily: 'monospace',
-                    color: qtyPlan ? '#475569' : '#cbd5e1', fontWeight: 600
+                    color: planEtapa != null ? '#475569' : '#cbd5e1', fontWeight: 600
                   }}>
-                    {qtyPlan ? qtyPlan.toLocaleString('en-US') : '—'}
+                    {planEtapa != null ? planEtapa.toLocaleString('en-US') : '—'}
                   </TableCell>
                   <TableCell sx={{
                     fontSize: '0.74rem', fontFamily: 'monospace', fontWeight: 700,
@@ -378,13 +427,13 @@ export function ResumenLote({ lote, fechasProceso }) {
               )
             })}
 
-            {/* ─── Fila de totales ─── */}
+            {/* ─── Totales Granel (etapas 1-2, en tabletas/cápsulas) ─── */}
             <TableRow sx={{ backgroundColor: '#F5F3FF', borderTop: '2px solid #C4B5FD' }}>
               <TableCell colSpan={4} sx={{
                 fontSize: '0.78rem', fontWeight: 800, color: '#4C1D95',
                 textTransform: 'uppercase', letterSpacing: 0.5, py: 1.5
               }}>
-                Totales del lote
+                Total Granel <span style={{ fontSize: '0.65rem', opacity: 0.7, fontWeight: 600 }}>(tabletas/cápsulas)</span>
               </TableCell>
               <TableCell sx={{ py: 1.5 }}>
                 <Chip size="small"
@@ -396,47 +445,53 @@ export function ResumenLote({ lote, fechasProceso }) {
                   }} />
               </TableCell>
               <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 800, color: '#4C1D95', py: 1.5 }}>
-                {qtyPlan ? qtyPlan.toLocaleString('en-US') : '—'}
+                {qtyPlanGranel ? qtyPlanGranel.toLocaleString('en-US') : '—'}
               </TableCell>
               <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 800, color: '#4C1D95', py: 1.5 }}>
-                {qtyRealUltima != null ? qtyRealUltima.toLocaleString('en-US') : '—'}
+                {realGranel != null ? realGranel.toLocaleString('en-US') : '—'}
               </TableCell>
               <TableCell sx={{ py: 1.5 }}>
-                {pctCumpl != null && (
-                  <Chip size="small" label={`${pctCumpl}% cumpl.`}
+                {pctGranel != null && (
+                  <Chip size="small" label={`${pctGranel}% cumpl.`}
                     sx={{
-                      backgroundColor: pctCumpl >= 95 ? '#f0fdf4' : pctCumpl >= 85 ? '#fffbeb' : '#fef2f2',
-                      color:           pctCumpl >= 95 ? '#16a34a' : pctCumpl >= 85 ? '#d97706' : '#dc2626',
+                      backgroundColor: pctGranel >= 95 ? '#f0fdf4' : pctGranel >= 85 ? '#fffbeb' : '#fef2f2',
+                      color:           pctGranel >= 95 ? '#16a34a' : pctGranel >= 85 ? '#d97706' : '#dc2626',
                       fontWeight: 800, fontSize: '0.7rem', height: 24
                     }} />
                 )}
               </TableCell>
             </TableRow>
 
-            {/* ─── Fila merma (si aplica) ─── */}
-            {mermaQty != null && mermaQty !== 0 && (
-              <TableRow sx={{ backgroundColor: '#fff' }}>
-                <TableCell colSpan={5} sx={{
-                  fontSize: '0.72rem', fontWeight: 700, color: '#64748b',
-                  textTransform: 'uppercase', letterSpacing: 0.5, py: 1.2,
-                  textAlign: 'right'
-                }}>
-                  Diferencia QTY (plan − real):
-                </TableCell>
-                <TableCell colSpan={3}>
-                  <Chip size="small"
-                    label={`${mermaQty > 0 ? '−' : '+'}${Math.abs(mermaQty).toLocaleString('en-US')} unidades`}
+            {/* ─── Totales Presentaciones (etapas 3-6, en cajas/frascos) ─── */}
+            <TableRow sx={{ backgroundColor: '#F5F3FF' }}>
+              <TableCell colSpan={5} sx={{
+                fontSize: '0.78rem', fontWeight: 800, color: '#4C1D95',
+                textTransform: 'uppercase', letterSpacing: 0.5, py: 1.5
+              }}>
+                Total Presentaciones <span style={{ fontSize: '0.65rem', opacity: 0.7, fontWeight: 600 }}>
+                  ({lote?.presentacion || '—'}{divisor ? ` · ÷${divisor}` : ''})
+                </span>
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 800, color: '#4C1D95', py: 1.5 }}>
+                {qtyPlanPres != null ? qtyPlanPres.toLocaleString('en-US') : '—'}
+              </TableCell>
+              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace', fontWeight: 800, color: '#4C1D95', py: 1.5 }}>
+                {realPres != null ? realPres.toLocaleString('en-US') : '—'}
+              </TableCell>
+              <TableCell sx={{ py: 1.5 }}>
+                {pctPres != null && (
+                  <Chip size="small" label={`${pctPres}% cumpl.`}
                     sx={{
-                      backgroundColor: mermaQty > 0 ? '#fef2f2' : '#f0fdf4',
-                      color:           mermaQty > 0 ? '#dc2626' : '#16a34a',
-                      fontWeight: 800, fontSize: '0.7rem', height: 22
+                      backgroundColor: pctPres >= 95 ? '#f0fdf4' : pctPres >= 85 ? '#fffbeb' : '#fef2f2',
+                      color:           pctPres >= 95 ? '#16a34a' : pctPres >= 85 ? '#d97706' : '#dc2626',
+                      fontWeight: 800, fontSize: '0.7rem', height: 24
                     }} />
-                </TableCell>
-              </TableRow>
-            )}
+                )}
+              </TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </TableContainer>
     </Paper>
   )
-} 
+}

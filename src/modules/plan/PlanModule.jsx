@@ -4,6 +4,7 @@ import { CalendarDays, RefreshCw, CircleDot, CheckCircle2, XCircle, Clock, Alert
 import { differenceInDays, parseISO, format, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '../../lib/supabase.js'
+import { ORDEN_ETAPA } from '../../constants/etapas.js'
 
 const LEAD_TIME = 9 // días
 const HOY = new Date('2026-05-13T00:00:00')
@@ -16,17 +17,24 @@ function fmtFecha(iso) {
 // ─── Semáforo ───
 function evaluarSemaforo(lote, fechasLote) {
   const e1 = fechasLote.find(f => f.etapas_proceso?.orden === 1)
-  const e6 = fechasLote.find(f => f.etapas_proceso?.orden === 6)
+  const eAceptado = fechasLote.find(f => f.etapas_proceso?.orden === ORDEN_ETAPA.ACEPTADO)
   if (!e1?.fecha_plan) return { color: '#94a3b8', bg: '#f8fafc', label: 'Sin plan', Icon: Clock }
 
   const inicio = parseISO(e1.fecha_plan)
   const limite = addDays(inicio, LEAD_TIME)
 
-  // ─── Lotes ya cerrados (liberados o rechazados): evalúa con fecha final real ───
-  if (lote.estatus === 'liberado' || lote.estatus === 'rechazado') {
-    const fechaFin = e6?.fecha_actual ? parseISO(e6.fecha_actual) : new Date(HOY)
+  if (lote.estatus === 'enviado') {
+    const eEnvio = fechasLote.find(f => f.etapas_proceso?.orden === ORDEN_ETAPA.ENVIO)
+    const fechaFin = eEnvio?.fecha_actual ? parseISO(eEnvio.fecha_actual) : new Date(HOY)
     const diff = differenceInDays(fechaFin, limite)
-    const prefijo = lote.estatus === 'liberado' ? 'Liberado' : 'Rechazado'
+    if (diff <= 0) return { color: '#0891b2', bg: '#ecfeff', label: 'Enviado a tiempo', Icon: BadgeCheck }
+    return { color: '#0891b2', bg: '#ecfeff', label: `Enviado +${diff}d`, Icon: BadgeCheck }
+  }
+
+  if (lote.estatus === 'liberado' || lote.estatus === 'rechazado') {
+    const fechaFin = eAceptado?.fecha_actual ? parseISO(eAceptado.fecha_actual) : new Date(HOY)
+    const diff = differenceInDays(fechaFin, limite)
+    const prefijo = lote.estatus === 'liberado' ? 'Aceptado' : 'Rechazado'
     const Icono   = lote.estatus === 'liberado' ? BadgeCheck : Ban
 
     if (diff <= 0)  return { color: '#16a34a', bg: '#f0fdf4', label: `${prefijo} a tiempo`,  Icon: Icono }
@@ -58,10 +66,12 @@ function GanttRow({ lote, fechasLote }) {
   // Días transcurridos (hasta hoy o hasta etapa 6 real)
   let diasReales = null
   if (inicio) {
-    const fin = (lote.estatus === 'liberado' || lote.estatus === 'rechazado')
-      ? (fechasLote.find(f => f.etapas_proceso?.orden === 6)?.fecha_actual
-          ? parseISO(fechasLote.find(f => f.etapas_proceso?.orden === 6).fecha_actual)
-          : new Date(HOY))
+    const fin = (lote.estatus === 'liberado' || lote.estatus === 'rechazado' || lote.estatus === 'enviado')
+      ? (fechasLote.find(f => f.etapas_proceso?.orden === ORDEN_ETAPA.ENVIO)?.fecha_actual
+          ? parseISO(fechasLote.find(f => f.etapas_proceso?.orden === ORDEN_ETAPA.ENVIO).fecha_actual)
+          : fechasLote.find(f => f.etapas_proceso?.orden === ORDEN_ETAPA.ACEPTADO)?.fecha_actual
+            ? parseISO(fechasLote.find(f => f.etapas_proceso?.orden === ORDEN_ETAPA.ACEPTADO).fecha_actual)
+            : new Date(HOY))
       : new Date(HOY)
     diasReales = differenceInDays(fin, inicio)
   }

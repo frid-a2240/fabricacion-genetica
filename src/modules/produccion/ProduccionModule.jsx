@@ -166,7 +166,6 @@ export default function App() {
         position: 'sticky', top: 0, zIndex: 100,
       }}>
         
-
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1 }}>
             Seguimiento de Procesos de Fabricación

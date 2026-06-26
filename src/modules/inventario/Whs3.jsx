@@ -6,8 +6,8 @@ const CFG = { code: 'WHS3', label: 'Cuarentena', color: '#ca8a04', grad: ['#713f
 export default function Whs3({ lotes = [] }) {
   return (
     <AlmacenLayout {...CFG} Icon={ShieldAlert}
-      descripcion="Producto retenido en espera de dictamen de Liberación"
-      mensajeVacio="Sin lotes pendientes de liberación">
+      descripcion="Producto en cuarentena (ingreso etapa 5)"
+      mensajeVacio="Sin lotes en cuarentena">
       {lotes.length > 0 && <TablaLotes lotes={lotes} color={CFG.color} etapaOrden={5} almacenId="whs3" />}
     </AlmacenLayout>
   )
