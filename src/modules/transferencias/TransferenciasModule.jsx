@@ -423,3 +423,23 @@ function FilaCampo({ label, origen, destino }) {
     </Box>
   )
 }
+// En las siguientes funciones, en los diferentes procesos de programacion se desmuestran que 
+// Los esquemas son sintetizados en una fuente del codigo en la que se pueden 
+// realizar transferencias de informacion entre almacenes asi como tambien cantidades.
+// Se han agregado los modulos de produccion, inventarios, planeacion, ajustes de inventarios, consulta de historial y 
+// transferencias.
+// en el modulo de produccion se visualizan las 8 etapas del proceso de fabricacion de lotes 
+// En el que tambien se visualizan el reusmen de lote y los desfases de los dias del proceso.
+// En el modulo de inventarios esta implementado la consulta de inventarios por stock, se busca por almacenes, 
+// en este caso son 5 pero todo es por consulta para consultar almacenes unicamente y ver donde se encuentra el producto almacenado
+// 
+//
+//
+//
+//
+//
+//
+///
+///
+//
+
