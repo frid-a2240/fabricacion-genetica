@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Box, Typography, CircularProgress, Button, TextField, InputAdornment,
-  Select, MenuItem, FormControl, Paper, Chip
+  Select, MenuItem, FormControl, Paper, Chip,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material'
 import {
   FlaskConical, Package, ShieldAlert, Ban, BadgeCheck, RefreshCw,
@@ -265,6 +266,83 @@ function FichaProducto({ producto, lotesRelacionados }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Sumatoria WHS1 (Granel) agrupada por medicamento + concentración
+// ═══════════════════════════════════════════════════════════════
+function ResumenWhs1({ grupos }) {
+  const totalGeneral = grupos.reduce((acc, g) => acc + g.cantidad, 0)
+
+  return (
+    <Paper elevation={0} sx={{
+      borderRadius: 3, mb: 3, overflow: 'hidden',
+      border: '1.5px solid #DDD6FE',
+      boxShadow: '0 4px 16px rgba(124,58,237,0.08)',
+    }}>
+      <Box sx={{
+        px: 2.5, py: 1.5,
+        background: 'linear-gradient(135deg,#4C1D95,#7C3AED)',
+        display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap',
+      }}>
+        <Box sx={{
+          width: 36, height: 36, borderRadius: 1.5,
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <FlaskConical size={18} color="#fff" />
+        </Box>
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)',
+            textTransform: 'uppercase', letterSpacing: 0.8 }}>
+             WHS1 — Granel
+          </Typography>
+          <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
+            Cantidad total 
+          </Typography>
+        </Box>
+        <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff' }}>
+          {totalGeneral.toLocaleString('en-US')} u. en total
+        </Typography>
+      </Box>
+
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              {['Denominación genérica', 'Concentración', 'Lotes', 'Cantidad'].map(h => (
+                <TableCell key={h} sx={{
+                  backgroundColor: '#F5F3FF', fontWeight: 800, fontSize: '0.66rem',
+                  color: '#4C1D95', textTransform: 'uppercase', letterSpacing: 0.5,
+                  py: 1.2, borderBottom: '1.5px solid #DDD6FE',
+                }}>
+                  {h}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {grupos.map((g, i) => (
+              <TableRow key={g.key} sx={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdfdfd' }}>
+                <TableCell sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>
+                  {g.denGenerica}
+                </TableCell>
+                <TableCell sx={{ fontSize: '0.82rem', color: '#475569' }}>
+                  {g.concentracion}
+                </TableCell>
+                <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#64748b' }}>
+                  {g.lotes}
+                </TableCell>
+                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.88rem', color: '#7C3AED' }}>
+                  {g.cantidad.toLocaleString('en-US')}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Componente principal — solo búsqueda
 // ═══════════════════════════════════════════════════════════════
 export default function InventarioModule() {
@@ -347,6 +425,37 @@ export default function InventarioModule() {
       return true
     })
   }, [hayFiltros, fAlmacen, fLote, fDenom, lotesData, productosResultado])
+
+  // Sumatoria de WHS1 (Granel), agrupada por medicamento + concentración,
+  // respetando los demás filtros activos (lote / denominación)
+  const resumenWhs1 = useMemo(() => {
+    if (fAlmacen !== 'whs1') return []
+    const ql = fLote.trim().toLowerCase()
+    const qd = fDenom.trim().toLowerCase()
+
+    const grupos = {}
+    lotesData.forEach(item => {
+      const { lote, almacenActual } = item
+      if (almacenActual !== 'whs1') return
+      if (ql && !lote.lote?.toLowerCase().includes(ql)) return
+      if (qd) {
+        const enGen  = lote.den_generica?.toLowerCase().includes(qd)
+        const enDist = lote.denominacion_distintiva?.toLowerCase().includes(qd)
+        const enProd = lote.producto?.toLowerCase().includes(qd)
+        if (!enGen && !enDist && !enProd) return
+      }
+      const gen  = lote.den_generica || lote.producto || 'Sin clasificar'
+      const conc = lote.concentracion || '—'
+      const key  = `${gen}|${conc}`.toLowerCase()
+      if (!grupos[key]) {
+        grupos[key] = { key, denGenerica: gen, concentracion: conc, cantidad: 0, lotes: 0 }
+      }
+      grupos[key].cantidad += getCantidadEnAlmacen(item, 'whs1') || 0
+      grupos[key].lotes += 1
+    })
+
+    return Object.values(grupos).sort((a, b) => a.denGenerica.localeCompare(b.denGenerica))
+  }, [fAlmacen, fLote, fDenom, lotesData])
 
   function limpiarFiltros() {
     setFAlmacen(''); setFLote(''); setFDenom('')
@@ -523,19 +632,24 @@ export default function InventarioModule() {
             </Typography>
           </Paper>
         ) : totalResultados === 0 ? (
-          <Paper elevation={0} sx={{
-            borderRadius: 3, border: '1.5px dashed #e2e8f0',
-            p: 5, backgroundColor: '#fff', textAlign: 'center',
-          }}>
-            <Typography sx={{ fontSize: '0.95rem', fontWeight: 700, color: '#475569', mb: 0.5 }}>
-              Sin resultados
-            </Typography>
-            <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-              Ningún producto del catálogo ni lote en inventario coincide con los filtros.
-            </Typography>
-          </Paper>
+          <>
+            {fAlmacen === 'whs1' && resumenWhs1.length > 0 && <ResumenWhs1 grupos={resumenWhs1} />}
+            <Paper elevation={0} sx={{
+              borderRadius: 3, border: '1.5px dashed #e2e8f0',
+              p: 5, backgroundColor: '#fff', textAlign: 'center',
+            }}>
+              <Typography sx={{ fontSize: '0.95rem', fontWeight: 700, color: '#475569', mb: 0.5 }}>
+                Sin resultados
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                Ningún producto del catálogo ni lote en inventario coincide con los filtros.
+              </Typography>
+            </Paper>
+          </>
         ) : (
           <Box>
+            {fAlmacen === 'whs1' && resumenWhs1.length > 0 && <ResumenWhs1 grupos={resumenWhs1} />}
+
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <Search size={14} color="#7C3AED" />
               <Typography sx={{ fontSize: '0.78rem', fontWeight: 800, color: '#7C3AED',

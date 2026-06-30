@@ -692,8 +692,16 @@ export function VSMFlow({ lote, fechasProceso, etapas, onActualizar, onUpdateLot
   const [indexAbierto, setIndexAbierto] = useState(0)
 
   const ordenados = [...fechasProceso].sort((a, b) => (a.etapas_proceso?.orden || 0) - (b.etapas_proceso?.orden || 0))
+
+  const envioFP = ordenados.find(fp => fp.etapas_proceso?.orden === ORDEN_ETAPA.ENVIO)
+  const envioCompletado = !!envioFP?.fecha_actual
+
   const hechas = dashStats.completados + dashStats.fueraDePlan
-  const pct = ordenados.length > 0 ? Math.round((hechas / ordenados.length) * 100) : 0
+  const pct = envioCompletado
+    ? 100
+    : ordenados.length > 0
+      ? Math.min(99, Math.round((hechas / ordenados.length) * 100))
+      : 0
 
   const statCards = [
     { label: 'Etapas',      value: dashStats.total,       color: '#7C3AED', Icon: Layers },

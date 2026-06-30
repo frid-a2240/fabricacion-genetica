@@ -67,3 +67,5 @@ export function Sidebar({ activo, onChange }) {
     </Box>
   )
 }
+// componente de sumatoria por medicamento
+// const =
