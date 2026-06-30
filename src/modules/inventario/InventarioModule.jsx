@@ -5,56 +5,11 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material'
 import {
-  FlaskConical, Package, ShieldAlert, Ban, BadgeCheck, RefreshCw,
+  FlaskConical, RefreshCw,
   Search, X, Hash, Pill, Warehouse, Filter, FileText, Layers
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
-import { ORDEN_ETAPA } from '../../constants/etapas.js'
-
-// ═══════════════════════════════════════════════════════════════
-// Configuración de almacenes (solo para etiquetar lotes, ya no hay tabs)
-// ═══════════════════════════════════════════════════════════════
-const ALMACENES = [
-  { id: 'whs1', code: 'WHS1', label: 'Granel',            Icon: FlaskConical, color: '#7C3AED' },
-  { id: 'whs2', code: 'WHS2', label: 'Acondicionamiento', Icon: Package,      color: '#d97706' },
-  { id: 'whs3', code: 'WHS3', label: 'Cuarentena',        Icon: ShieldAlert,  color: '#ca8a04' },
-  { id: 'whs4', code: 'WHS4', label: 'Liberado',          Icon: BadgeCheck,   color: '#16a34a' },
-  { id: 'whs5', code: 'WHS5', label: 'Rechazado',         Icon: Ban,          color: '#dc2626' },
-]
-
-// ═══════════════════════════════════════════════════════════════
-// Lógica de ubicación de lotes
-// ═══════════════════════════════════════════════════════════════
-function fueraDeInventarioActivo(estatus) {
-  return estatus === 'enviado'
-}
-
-function getAlmacenActual(lote, fechasLote) {
-  if (fueraDeInventarioActivo(lote.estatus)) return null
-  if (lote.estatus === 'liberado')  return 'whs4'
-  if (lote.estatus === 'rechazado') return 'whs5'
-  const etapa = (orden) => fechasLote.find(f => f.etapas_proceso?.orden === orden)
-  const eCuarentena = etapa(ORDEN_ETAPA.CUARENTENA)
-  const e4 = etapa(ORDEN_ETAPA.PROD_ACOND)
-  const e2 = etapa(ORDEN_ETAPA.PROD_GRANEL)
-  if (eCuarentena?.fecha_actual) return 'whs3'
-  if (e4?.fecha_actual) return 'whs2'
-  if (e2?.fecha_actual) return 'whs1'
-  return null
-}
-
-function getCantidadEnAlmacen(item, almacenId) {
-  const ordenPorAlmacen = {
-    whs1: ORDEN_ETAPA.PROD_GRANEL,
-    whs2: ORDEN_ETAPA.PROD_ACOND,
-    whs3: ORDEN_ETAPA.CUARENTENA,
-    whs4: ORDEN_ETAPA.ACEPTADO,
-    whs5: ORDEN_ETAPA.ACEPTADO,
-  }
-  const orden = ordenPorAlmacen[almacenId]
-  const etapa = item.fechasLote.find(f => f.etapas_proceso?.orden === orden)
-  return etapa?.cantidad_actual ?? item.lote.cantidad ?? null
-}
+import { ALMACENES, getAlmacenActual, getCantidadEnAlmacen } from '../../lib/almacenes.js'
 
 // ═══════════════════════════════════════════════════════════════
 // Helpers de match
@@ -266,20 +221,22 @@ function FichaProducto({ producto, lotesRelacionados }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Sumatoria WHS1 (Granel) agrupada por medicamento + concentración
+// Sumatoria por almacén, agrupada por medicamento + concentración
 // ═══════════════════════════════════════════════════════════════
-function ResumenWhs1({ grupos }) {
+function ResumenAlmacen({ grupos, almacen }) {
   const totalGeneral = grupos.reduce((acc, g) => acc + g.cantidad, 0)
+  const Icon = almacen?.Icon || FlaskConical
+  const color = almacen?.color || '#7C3AED'
 
   return (
     <Paper elevation={0} sx={{
       borderRadius: 3, mb: 3, overflow: 'hidden',
-      border: '1.5px solid #DDD6FE',
-      boxShadow: '0 4px 16px rgba(124,58,237,0.08)',
+      border: `1.5px solid ${color}40`,
+      boxShadow: `0 4px 16px ${color}20`,
     }}>
       <Box sx={{
         px: 2.5, py: 1.5,
-        background: 'linear-gradient(135deg,#4C1D95,#7C3AED)',
+        background: `linear-gradient(135deg, ${color}cc, ${color})`,
         display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap',
       }}>
         <Box sx={{
@@ -287,15 +244,15 @@ function ResumenWhs1({ grupos }) {
           backgroundColor: 'rgba(255,255,255,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <FlaskConical size={18} color="#fff" />
+          <Icon size={18} color="#fff" />
         </Box>
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, color: 'rgba(255,255,255,0.8)',
             textTransform: 'uppercase', letterSpacing: 0.8 }}>
-             WHS1 — Granel
+             {almacen ? `${almacen.code} — ${almacen.label}` : 'Almacén'}
           </Typography>
           <Typography sx={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
-            Cantidad total 
+            Cantidad total
           </Typography>
         </Box>
         <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff' }}>
@@ -330,7 +287,7 @@ function ResumenWhs1({ grupos }) {
                 <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#64748b' }}>
                   {g.lotes}
                 </TableCell>
-                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.88rem', color: '#7C3AED' }}>
+                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.88rem', color }}>
                   {g.cantidad.toLocaleString('en-US')}
                 </TableCell>
               </TableRow>
@@ -426,17 +383,17 @@ export default function InventarioModule() {
     })
   }, [hayFiltros, fAlmacen, fLote, fDenom, lotesData, productosResultado])
 
-  // Sumatoria de WHS1 (Granel), agrupada por medicamento + concentración,
+  // Sumatoria del almacén seleccionado, agrupada por medicamento + concentración,
   // respetando los demás filtros activos (lote / denominación)
-  const resumenWhs1 = useMemo(() => {
-    if (fAlmacen !== 'whs1') return []
+  const resumenAlmacen = useMemo(() => {
+    if (!fAlmacen) return []
     const ql = fLote.trim().toLowerCase()
     const qd = fDenom.trim().toLowerCase()
 
     const grupos = {}
     lotesData.forEach(item => {
       const { lote, almacenActual } = item
-      if (almacenActual !== 'whs1') return
+      if (almacenActual !== fAlmacen) return
       if (ql && !lote.lote?.toLowerCase().includes(ql)) return
       if (qd) {
         const enGen  = lote.den_generica?.toLowerCase().includes(qd)
@@ -450,7 +407,7 @@ export default function InventarioModule() {
       if (!grupos[key]) {
         grupos[key] = { key, denGenerica: gen, concentracion: conc, cantidad: 0, lotes: 0 }
       }
-      grupos[key].cantidad += getCantidadEnAlmacen(item, 'whs1') || 0
+      grupos[key].cantidad += getCantidadEnAlmacen(item, fAlmacen) || 0
       grupos[key].lotes += 1
     })
 
@@ -633,7 +590,9 @@ export default function InventarioModule() {
           </Paper>
         ) : totalResultados === 0 ? (
           <>
-            {fAlmacen === 'whs1' && resumenWhs1.length > 0 && <ResumenWhs1 grupos={resumenWhs1} />}
+            {fAlmacen && resumenAlmacen.length > 0 && (
+              <ResumenAlmacen grupos={resumenAlmacen} almacen={ALMACENES.find(a => a.id === fAlmacen)} />
+            )}
             <Paper elevation={0} sx={{
               borderRadius: 3, border: '1.5px dashed #e2e8f0',
               p: 5, backgroundColor: '#fff', textAlign: 'center',
@@ -648,7 +607,9 @@ export default function InventarioModule() {
           </>
         ) : (
           <Box>
-            {fAlmacen === 'whs1' && resumenWhs1.length > 0 && <ResumenWhs1 grupos={resumenWhs1} />}
+            {fAlmacen && resumenAlmacen.length > 0 && (
+              <ResumenAlmacen grupos={resumenAlmacen} almacen={ALMACENES.find(a => a.id === fAlmacen)} />
+            )}
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <Search size={14} color="#7C3AED" />

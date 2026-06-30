@@ -1,33 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Box, Typography, Button, TextField, InputAdornment,
-  Select, MenuItem, FormControl, Paper, Snackbar, Alert
+  Select, MenuItem, FormControl, Paper, Snackbar, Alert, CircularProgress
 } from '@mui/material'
 import {
-  ArrowLeftRight, ArrowRight, FlaskConical, Package, ShieldAlert,
-  Ban, BadgeCheck, Hash, Calendar, Boxes, Send, RotateCcw,
-  Warehouse, Truck
+  ArrowLeftRight, ArrowRight, Hash, Calendar, Boxes, Send, RotateCcw,
+  Warehouse, Truck, CheckCircle2, X, AlertTriangle, ShieldAlert
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
-
-// ═══════════════════════════════════════════════════════════════
-// Catálogo de almacenes (mismo que Inventario)
-// ═══════════════════════════════════════════════════════════════
-const ALMACENES = [
-  { id: 'whs1', code: 'WHS1', label: 'Granel',            Icon: FlaskConical, color: '#7C3AED', grad: ['#4c1d95','#7C3AED'] },
-  { id: 'whs2', code: 'WHS2', label: 'Acondicionamiento', Icon: Package,      color: '#d97706', grad: ['#78350f','#d97706'] },
-  { id: 'whs3', code: 'WHS3', label: 'Cuarentena',        Icon: ShieldAlert,  color: '#ca8a04', grad: ['#713f12','#ca8a04'] },
-  { id: 'whs4', code: 'WHS4', label: 'Liberado',          Icon: BadgeCheck,   color: '#16a34a', grad: ['#14532d','#16a34a'] },
-  { id: 'whs5', code: 'WHS5', label: 'Rechazado',         Icon: Ban,          color: '#dc2626', grad: ['#7f1d1d','#dc2626'] },
-]
+import { ALMACENES, getAlmacenActual, getCantidadEnAlmacen } from '../../lib/almacenes.js'
+import { ORDEN_ETAPA } from '../../constants/etapas.js'
 
 const HOY_ISO = new Date().toISOString().slice(0, 10)
 
+// Reglas de negocio: de Granel (WHS1) no se transfiere por aquí — ese salto
+// lo hace producción (Planeación/Producción de Acondicionamiento). Solo se
+// permite mover lotes que ya están en Acondicionamiento o en Cuarentena.
+const ORIGENES_PERMITIDOS = ['whs2', 'whs3']
+
+function alm(id) { return ALMACENES.find(a => a.id === id) }
+
 // ═══════════════════════════════════════════════════════════════
-// Selector de almacén con ícono
+// Selector de almacén con ícono — restringido a una lista de ids
 // ═══════════════════════════════════════════════════════════════
-function SelectAlmacen({ value, onChange, exclude, placeholder = 'Selecciona almacén' }) {
-  const opciones = ALMACENES.filter(a => a.id !== exclude)
+function SelectAlmacen({ value, onChange, only, placeholder = 'Selecciona almacén' }) {
+  const opciones = ALMACENES.filter(a => only.includes(a.id))
   return (
     <FormControl fullWidth size="small">
       <Select
@@ -36,7 +33,7 @@ function SelectAlmacen({ value, onChange, exclude, placeholder = 'Selecciona alm
         displayEmpty
         renderValue={(v) => {
           if (!v) return <span style={{ color: '#94a3b8' }}>{placeholder}</span>
-          const a = ALMACENES.find(x => x.id === v)
+          const a = alm(v)
           return a ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <a.Icon size={14} color={a.color} />
@@ -62,6 +59,52 @@ function SelectAlmacen({ value, onChange, exclude, placeholder = 'Selecciona alm
             </Box>
           </MenuItem>
         ))}
+      </Select>
+    </FormControl>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Selector de lote — solo lotes que están actualmente en el almacén origen
+// ═══════════════════════════════════════════════════════════════
+function SelectLote({ value, onChange, lotesDisponibles, disabled }) {
+  return (
+    <FormControl fullWidth size="small" disabled={disabled}>
+      <Select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        displayEmpty
+        renderValue={(v) => {
+          if (!v) return <span style={{ color: '#94a3b8' }}>{disabled ? 'Elige primero el almacén origen' : 'Selecciona lote'}</span>
+          const it = lotesDisponibles.find(x => x.lote.id === v)
+          return it ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{it.lote.lote}</span>
+              <span style={{ color: '#64748b', fontSize: '0.82rem' }}>— {it.lote.producto || it.lote.den_generica || 'Sin producto'}</span>
+            </Box>
+          ) : v
+        }}
+        sx={{
+          fontSize: '0.88rem', backgroundColor: '#fff', borderRadius: 2,
+          '& fieldset': { borderColor: '#e2e8f0' },
+          '&:hover fieldset': { borderColor: '#C4B5FD' },
+          '&.Mui-focused fieldset': { borderColor: '#7C3AED' },
+        }}
+      >
+        <MenuItem value=""><em>Selecciona lote</em></MenuItem>
+        {lotesDisponibles.map(it => (
+          <MenuItem key={it.lote.id} value={it.lote.id}>
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{it.lote.lote}</span>
+              <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>{it.lote.producto || it.lote.den_generica || 'Sin producto'}</span>
+            </Box>
+          </MenuItem>
+        ))}
+        {lotesDisponibles.length === 0 && !disabled && (
+          <MenuItem value="" disabled>
+            <em>No hay lotes en este almacén</em>
+          </MenuItem>
+        )}
       </Select>
     </FormControl>
   )
@@ -103,50 +146,164 @@ function FlechaConexion() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Renglón con campo origen → flecha → destino
+// ═══════════════════════════════════════════════════════════════
+function FilaCampo({ label, origen, destino }) {
+  return (
+    <Box sx={{
+      display: 'grid',
+      gridTemplateColumns: { xs: '1fr', md: '1fr 60px 1fr' },
+      gap: 2, alignItems: 'end', mb: 2.5,
+    }}>
+      <Box>
+        <Label>{label}</Label>
+        {origen}
+      </Box>
+      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+        <FlechaConexion />
+      </Box>
+      <Box>
+        <Label>{label}</Label>
+        {destino}
+      </Box>
+    </Box>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Componente principal
 // ═══════════════════════════════════════════════════════════════
 export default function TransferenciasModule() {
+  const [lotesData, setLotesData] = useState([])
+  const [cargando, setCargando]   = useState(true)
+  const [guardando, setGuardando] = useState(false)
+
   // Origen
   const [origAlmacen, setOrigAlmacen] = useState('')
-  const [origLote, setOrigLote]       = useState('')
-  const [origQty, setOrigQty]         = useState('')
-  const [origFecha, setOrigFecha]     = useState(HOY_ISO)
+  const [origLoteId, setOrigLoteId]   = useState('')
 
   // Destino
   const [destAlmacen, setDestAlmacen] = useState('')
-  const [destLote, setDestLote]       = useState('')
-  const [destQty, setDestQty]         = useState('')
-  const [destFecha, setDestFecha]     = useState(HOY_ISO)
-
-  // Cuando cambia el lote de origen, auto-llenar destino (es el mismo lote moviéndose)
-  useEffect(() => { setDestLote(origLote) }, [origLote])
-  useEffect(() => { setDestQty(origQty) }, [origQty])
+  const [cantidad, setCantidad]       = useState('')
+  const [fecha, setFecha]             = useState(HOY_ISO)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
 
+  useEffect(() => { cargarLotes() }, [])
+
+  async function cargarLotes() {
+    setCargando(true)
+    const [{ data: lotes }, { data: fechas }] = await Promise.all([
+      supabase.from('lotes').select('*').order('created_at', { ascending: false }),
+      supabase.from('fechas_proceso').select('*, etapas_proceso(nombre, orden)'),
+    ])
+    const fechasPorLote = {}
+    ;(fechas || []).forEach(f => {
+      if (!fechasPorLote[f.lote_id]) fechasPorLote[f.lote_id] = []
+      fechasPorLote[f.lote_id].push(f)
+    })
+    const items = (lotes || []).map(lote => {
+      const fechasLote = fechasPorLote[lote.id] || []
+      const almacenActual = getAlmacenActual(lote, fechasLote)
+      return { lote, fechasLote, almacenActual }
+    }).filter(it => it.almacenActual !== null)
+    setLotesData(items)
+    setCargando(false)
+  }
+
+  // Lotes que están actualmente en el almacén de origen elegido
+  const lotesDisponibles = useMemo(() => {
+    if (!origAlmacen) return []
+    return lotesData.filter(it => it.almacenActual === origAlmacen)
+  }, [origAlmacen, lotesData])
+
+  const loteSel = useMemo(
+    () => lotesDisponibles.find(it => it.lote.id === origLoteId) || null,
+    [lotesDisponibles, origLoteId]
+  )
+
+  const cantidadDisponible = loteSel ? getCantidadEnAlmacen(loteSel, origAlmacen) : null
+
+  // Al cambiar el almacén origen, limpiar lo que dependa de él.
+  // WHS2 solo puede ir a Cuarentena (WHS3), así que se preselecciona.
+  function cambiarOrigAlmacen(val) {
+    setOrigAlmacen(val)
+    setOrigLoteId('')
+    setDestAlmacen(val === 'whs2' ? 'whs3' : '')
+    setCantidad('')
+    setMotivoRechazo('')
+  }
+
+  // Al elegir lote, autollenar la cantidad disponible en el almacén origen
+  function cambiarLote(loteId) {
+    setOrigLoteId(loteId)
+    const it = lotesDisponibles.find(x => x.lote.id === loteId)
+    const disp = it ? getCantidadEnAlmacen(it, origAlmacen) : null
+    setCantidad(disp != null ? String(disp) : '')
+  }
+
+  const motivoRequerido = destAlmacen === 'whs5' && !motivoRechazo.trim()
+
   const puedeGuardar =
-    origAlmacen && destAlmacen && origAlmacen !== destAlmacen &&
-    origLote.trim() && origQty && origFecha &&
-    destLote.trim() && destQty && destFecha
+    origAlmacen && origLoteId && destAlmacen &&
+    cantidad && Number(cantidad) > 0 && fecha && !motivoRequerido && !guardando
 
   function limpiar() {
-    setOrigAlmacen(''); setOrigLote(''); setOrigQty(''); setOrigFecha(HOY_ISO)
-    setDestAlmacen(''); setDestLote(''); setDestQty(''); setDestFecha(HOY_ISO)
+    setOrigAlmacen(''); setOrigLoteId(''); setDestAlmacen('')
+    setCantidad(''); setFecha(HOY_ISO); setMotivoRechazo('')
   }
 
   async function guardar() {
-    // TODO: cuando exista la tabla `transferencias` en Supabase, hacer el INSERT aquí.
-    // Por ahora solo simula el guardado para validar el diseño.
-    setSnackbar({
-      open: true,
-      severity: 'success',
-      message: `✓ Transferencia registrada: ${origLote} de ${origAlmacen.toUpperCase()} → ${destAlmacen.toUpperCase()} (${Number(destQty).toLocaleString('en-US')} u.)`,
-    })
-    limpiar()
+    if (!loteSel) return
+    setGuardando(true)
+    try {
+      const etapaOrden = destAlmacen === 'whs3' ? ORDEN_ETAPA.CUARENTENA : ORDEN_ETAPA.ACEPTADO
+      const fp = loteSel.fechasLote.find(f => f.etapas_proceso?.orden === etapaOrden)
+      if (!fp) throw new Error('No se encontró la etapa de proceso correspondiente para este lote')
+
+      const fechaAnterior = fp.fecha_actual || null
+      const cantidadNum = parseInt(cantidad)
+
+      const { error: errFp } = await supabase.from('fechas_proceso')
+        .update({ fecha_actual: fecha, cantidad_actual: cantidadNum })
+        .eq('id', fp.id)
+      if (errFp) throw errFp
+
+      if (destAlmacen === 'whs4') {
+        const { error: errLote } = await supabase.from('lotes')
+          .update({ estatus: 'liberado', motivo_rechazo: null })
+          .eq('id', loteSel.lote.id)
+        if (errLote) throw errLote
+      } else if (destAlmacen === 'whs5') {
+        const { error: errLote } = await supabase.from('lotes')
+          .update({ estatus: 'rechazado', motivo_rechazo: motivoRechazo.trim() || null })
+          .eq('id', loteSel.lote.id)
+        if (errLote) throw errLote
+      }
+
+      await supabase.from('historial_ediciones').insert({
+        lote_id: loteSel.lote.id, etapa_id: fp.etapa_id, lote: loteSel.lote.lote,
+        etapa_nombre: fp.etapas_proceso?.nombre || '', cantidad: cantidadNum || null,
+        nombre_usuario: '—', fecha_captura: new Date().toISOString(),
+        fecha_actual_anterior: fechaAnterior, fecha_actual_nueva: fecha || null,
+      })
+
+      const origA = alm(origAlmacen), destA = alm(destAlmacen)
+      setSnackbar({
+        open: true, severity: 'success',
+        message: `✓ Transferencia registrada: ${loteSel.lote.lote} de ${origA.code} → ${destA.code} (${cantidadNum.toLocaleString('en-US')} u.)`,
+      })
+      limpiar()
+      await cargarLotes()
+    } catch (err) {
+      setSnackbar({ open: true, severity: 'error', message: 'Error: ' + err.message })
+    }
+    setGuardando(false)
   }
 
-  const origAlm = ALMACENES.find(a => a.id === origAlmacen)
-  const destAlm = ALMACENES.find(a => a.id === destAlmacen)
+  const origAlm = alm(origAlmacen)
+  const destAlm = alm(destAlmacen)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F8FAFC' }}>
@@ -170,14 +327,23 @@ export default function TransferenciasModule() {
             Transferencias
           </Typography>
           <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-            Mover lotes entre almacenes
+            Mover lotes entre almacenes · Acondicionamiento → Cuarentena → Liberado/Rechazado
           </Typography>
         </Box>
+        <Box sx={{ flex: 1 }} />
+        <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+          {lotesData.length} lotes en inventario activo
+        </Typography>
       </Box>
 
       {/* ═══ FORMULARIO ═══ */}
       <Box sx={{ p: 4, flex: 1 }}>
 
+        {cargando ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress sx={{ color: '#7C3AED' }} />
+          </Box>
+        ) : (
         <Paper elevation={0} sx={{
           borderRadius: 3, border: '1.5px solid #e2e8f0',
           p: 4, backgroundColor: '#fff', maxWidth: 1200, mx: 'auto',
@@ -212,8 +378,8 @@ export default function TransferenciasModule() {
                 </Typography>
                 <Typography sx={{ fontSize: '1rem', fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>
                   De {origAlm ? `· ${origAlm.code} ${origAlm.label}` : ''}
-                </Typography>
-              </Box>
+                </Typography>  
+              </Box>  
             </Box>
 
             <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', justifyContent: 'center' }}>
@@ -259,12 +425,53 @@ export default function TransferenciasModule() {
           <FilaCampo
             label="Almacén"
             origen={
-              <SelectAlmacen value={origAlmacen} onChange={setOrigAlmacen}
-                exclude={destAlmacen} placeholder="Almacén origen" />
+              <SelectAlmacen value={origAlmacen} onChange={cambiarOrigAlmacen}
+                only={ORIGENES_PERMITIDOS} placeholder="Almacén origen (WHS2 o WHS3)" />
             }
             destino={
-              <SelectAlmacen value={destAlmacen} onChange={setDestAlmacen}
-                exclude={origAlmacen} placeholder="Almacén destino" />
+              origAlmacen === 'whs2' ? (
+                <Box sx={{
+                  height: 40, borderRadius: 2, border: '1.5px solid #fde68a',
+                  backgroundColor: '#fffbeb', display: 'flex', alignItems: 'center', gap: 1, px: 1.5,
+                }}>
+                  <ShieldAlert size={14} color="#ca8a04" />
+                  <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e' }}>
+                    WHS3 — Cuarentena (único destino válido)
+                  </Typography>
+                </Box>
+              ) : origAlmacen === 'whs3' ? (
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                  <Button variant={destAlmacen === 'whs4' ? 'contained' : 'outlined'}
+                    startIcon={<CheckCircle2 size={15} />}
+                    onClick={() => setDestAlmacen(destAlmacen === 'whs4' ? '' : 'whs4')}
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, fontSize: '0.78rem',
+                      ...(destAlmacen === 'whs4'
+                        ? { backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }
+                        : { color: '#16a34a', borderColor: '#bbf7d0',
+                          '&:hover': { backgroundColor: '#f0fdf4', borderColor: '#16a34a' } }) }}>
+                    Aprobar
+                  </Button>
+                  <Button variant={destAlmacen === 'whs5' ? 'contained' : 'outlined'}
+                    startIcon={<X size={15} />}
+                    onClick={() => setDestAlmacen(destAlmacen === 'whs5' ? '' : 'whs5')}
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, fontSize: '0.78rem',
+                      ...(destAlmacen === 'whs5'
+                        ? { backgroundColor: '#dc2626', '&:hover': { backgroundColor: '#b91c1c' } }
+                        : { color: '#dc2626', borderColor: '#fecaca',
+                          '&:hover': { backgroundColor: '#fef2f2', borderColor: '#dc2626' } }) }}>
+                    Rechazar
+                  </Button>
+                </Box>
+              ) : (
+                <Box sx={{
+                  height: 40, borderRadius: 2, border: '1.5px dashed #e2e8f0',
+                  display: 'flex', alignItems: 'center', px: 1.5,
+                }}>
+                  <Typography sx={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    Elige primero el almacén origen
+                  </Typography>
+                </Box>
+              )
             }
           />
 
@@ -272,20 +479,14 @@ export default function TransferenciasModule() {
           <FilaCampo
             label="Lote"
             origen={
-              <TextField value={origLote} onChange={e => setOrigLote(e.target.value)}
-                placeholder="ej. 123456" size="small" fullWidth
-                slotProps={{ input: {
-                  startAdornment: <InputAdornment position="start"><Hash size={14} color="#94a3b8" /></InputAdornment>,
-                  sx: { fontSize: '0.88rem', fontFamily: 'monospace', backgroundColor: '#fff', borderRadius: 2 },
-                } }}
-              />
+              <SelectLote value={origLoteId} onChange={cambiarLote}
+                lotesDisponibles={lotesDisponibles} disabled={!origAlmacen} />
             }
             destino={
-              <TextField value={destLote} onChange={e => setDestLote(e.target.value)}
-                placeholder="ej. 123456" size="small" fullWidth
+              <TextField value={loteSel?.lote.lote || ''} disabled placeholder="—" size="small" fullWidth
                 slotProps={{ input: {
                   startAdornment: <InputAdornment position="start"><Hash size={14} color="#94a3b8" /></InputAdornment>,
-                  sx: { fontSize: '0.88rem', fontFamily: 'monospace', backgroundColor: '#fff', borderRadius: 2 },
+                  sx: { fontSize: '0.88rem', fontFamily: 'monospace', backgroundColor: '#f8fafc', borderRadius: 2 },
                 } }}
               />
             }
@@ -295,17 +496,17 @@ export default function TransferenciasModule() {
           <FilaCampo
             label="Cantidad (Qty)"
             origen={
-              <TextField value={origQty} onChange={e => setOrigQty(e.target.value)}
-                type="number" placeholder="0" size="small" fullWidth
+              <TextField value={cantidadDisponible != null ? cantidadDisponible.toLocaleString('en-US') : ''}
+                disabled placeholder="0" size="small" fullWidth
                 slotProps={{ input: {
                   startAdornment: <InputAdornment position="start"><Boxes size={14} color="#94a3b8" /></InputAdornment>,
-                  sx: { fontSize: '0.88rem', fontFamily: 'monospace', backgroundColor: '#fff', borderRadius: 2 },
+                  sx: { fontSize: '0.88rem', fontFamily: 'monospace', backgroundColor: '#f8fafc', borderRadius: 2 },
                 } }}
               />
             }
             destino={
-              <TextField value={destQty} onChange={e => setDestQty(e.target.value)}
-                type="number" placeholder="0" size="small" fullWidth
+              <TextField value={cantidad} onChange={e => setCantidad(e.target.value)}
+                type="number" placeholder="0" size="small" fullWidth disabled={!origLoteId}
                 slotProps={{ input: {
                   startAdornment: <InputAdornment position="start"><Boxes size={14} color="#94a3b8" /></InputAdornment>,
                   sx: { fontSize: '0.88rem', fontFamily: 'monospace', backgroundColor: '#fff', borderRadius: 2 },
@@ -318,17 +519,17 @@ export default function TransferenciasModule() {
           <FilaCampo
             label="Fecha"
             origen={
-              <TextField type="date" value={origFecha} onChange={e => setOrigFecha(e.target.value)}
+              <TextField type="date" value={fecha} disabled
                 size="small" fullWidth
                 slotProps={{ input: {
                   startAdornment: <InputAdornment position="start"><Calendar size={14} color="#94a3b8" /></InputAdornment>,
-                  sx: { fontSize: '0.88rem', backgroundColor: '#fff', borderRadius: 2 },
+                  sx: { fontSize: '0.88rem', backgroundColor: '#f8fafc', borderRadius: 2 },
                 } }}
               />
             }
             destino={
-              <TextField type="date" value={destFecha} onChange={e => setDestFecha(e.target.value)}
-                size="small" fullWidth
+              <TextField type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+                size="small" fullWidth disabled={!origLoteId}
                 slotProps={{ input: {
                   startAdornment: <InputAdornment position="start"><Calendar size={14} color="#94a3b8" /></InputAdornment>,
                   sx: { fontSize: '0.88rem', backgroundColor: '#fff', borderRadius: 2 },
@@ -337,15 +538,38 @@ export default function TransferenciasModule() {
             }
           />
 
+          {/* ─── Motivo de rechazo ─── */}
+          {destAlmacen === 'whs5' && (
+            <Box sx={{ mb: 2.5, backgroundColor: '#fef2f2', borderRadius: 2, p: 1.5,
+              border: '1px solid #fecaca', display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <AlertTriangle size={14} color="#dc2626" />
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#dc2626' }}>
+                  Motivo del rechazo *
+                </Typography>
+              </Box>
+              <TextField
+                value={motivoRechazo}
+                onChange={e => setMotivoRechazo(e.target.value)}
+                multiline minRows={2} maxRows={4}
+                placeholder="Describe brevemente por qué se rechaza el lote..."
+                fullWidth size="small"
+                error={motivoRequerido}
+                helperText={motivoRequerido ? 'El motivo es obligatorio para rechazar' : ' '}
+                sx={{ backgroundColor: '#fff', borderRadius: 2 }}
+              />
+            </Box>
+          )}
+
           {/* ─── Validación / aviso ─── */}
-          {origAlmacen && destAlmacen && origAlmacen === destAlmacen && (
+          {origAlmacen && lotesDisponibles.length === 0 && (
             <Box sx={{
-              mt: 2, p: 1.5, borderRadius: 2,
-              backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+              mt: -1, mb: 2.5, p: 1.5, borderRadius: 2,
+              backgroundColor: '#fffbeb', border: '1px solid #fde68a',
               display: 'flex', alignItems: 'center', gap: 1,
             }}>
-              <Typography sx={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: 700 }}>
-                ⚠ El almacén de origen y destino no pueden ser el mismo
+              <Typography sx={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 700 }}>
+                ⚠ No hay lotes actualmente en {alm(origAlmacen)?.code} — {alm(origAlmacen)?.label}
               </Typography>
             </Box>
           )}
@@ -381,10 +605,11 @@ export default function TransferenciasModule() {
                 },
               }}
             >
-              Registrar transferencia
+              {guardando ? 'Registrando...' : 'Registrar transferencia'}
             </Button>
           </Box>
         </Paper>
+        )}
       </Box>
 
       <Snackbar open={snackbar.open} autoHideDuration={4000}
@@ -398,48 +623,3 @@ export default function TransferenciasModule() {
     </Box>
   )
 }
-
-// ═══════════════════════════════════════════════════════════════
-// Renglón con campo origen → flecha → destino
-// ═══════════════════════════════════════════════════════════════
-function FilaCampo({ label, origen, destino }) {
-  return (
-    <Box sx={{
-      display: 'grid',
-      gridTemplateColumns: { xs: '1fr', md: '1fr 60px 1fr' },
-      gap: 2, alignItems: 'end', mb: 2.5,
-    }}>
-      <Box>
-        <Label>{label}</Label>
-        {origen}
-      </Box>
-      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-        <FlechaConexion />
-      </Box>
-      <Box>
-        <Label>{label}</Label>
-        {destino}
-      </Box>
-    </Box>
-  )
-}
-// En las siguientes funciones, en los diferentes procesos de programacion se desmuestran que 
-// Los esquemas son sintetizados en una fuente del codigo en la que se pueden 
-// realizar transferencias de informacion entre almacenes asi como tambien cantidades.
-// Se han agregado los modulos de produccion, inventarios, planeacion, ajustes de inventarios, consulta de historial y 
-// transferencias.
-// en el modulo de produccion se visualizan las 8 etapas del proceso de fabricacion de lotes 
-// En el que tambien se visualizan el reusmen de lote y los desfases de los dias del proceso.
-// En el modulo de inventarios esta implementado la consulta de inventarios por stock, se busca por almacenes, 
-// en este caso son 5 pero todo es por consulta para consultar almacenes unicamente y ver donde se encuentra el producto almacenado
-// 
-//
-//
-//
-//
-//
-//
-///
-///
-//
-
